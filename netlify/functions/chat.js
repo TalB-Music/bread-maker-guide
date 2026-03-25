@@ -36,6 +36,14 @@ export default async (req, context) => {
 
   const data = await response.json();
 
+  // Surface Gemini errors
+  if (data.error) {
+    return new Response(JSON.stringify({ error: data.error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   // Convert Gemini response → Anthropic format so the frontend needs no changes
   const text =
     data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ?? "";
