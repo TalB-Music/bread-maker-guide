@@ -3,7 +3,7 @@ export default async (req, context) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "API key not configured" }), {
       status: 500,
@@ -13,20 +13,39 @@ export default async (req, context) => {
 
   const body = await req.json();
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify(body),
-  });
+  // Convert Anthropic format → Gemini format
+  const geminiBody = {
+    system_instruction: body.system
+      ? { parts: [{ text: body.system }] }
+      : undefined,
+    contents: body.messages.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    })),
+    generationConfig: { maxOutputTokens: body.max_tokens ?? 1000 },
+  };
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(geminiBody),
+    }
+  );
 
   const data = await response.json();
 
-  return new Response(JSON.stringify(data), {
-    status: response.status,
+  // Convert Gemini response → Anthropic format so the frontend needs no changes
+  const text =
+    data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ?? "";
+
+  const anthropicFormat = {
+    content: [{ type: "text", text }],
+  };
+
+  return new Response(JSON.stringify(anthropicFormat), {
+    status: 200,
     headers: { "Content-Type": "application/json" },
   });
 };
