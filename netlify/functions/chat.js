@@ -3,7 +3,7 @@ export default async (req, context) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "API key not configured" }), {
       status: 500,
@@ -13,20 +13,29 @@ export default async (req, context) => {
 
   const body = await req.json();
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      "Authorization": `Bearer ${apiKey}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      model: "llama-3.1-8b-instant",
+      max_tokens: body.max_tokens ?? 1000,
+      messages: [
+        { role: "system", content: body.system ?? "" },
+        ...body.messages,
+      ],
+    }),
   });
 
   const data = await response.json();
 
-  return new Response(JSON.stringify(data), {
-    status: response.status,
+  // Convert OpenAI-style response → Anthropic format so the frontend needs no changes
+  const text = data.choices?.[0]?.message?.content ?? "";
+
+  return new Response(JSON.stringify({ content: [{ type: "text", text }] }), {
+    status: 200,
     headers: { "Content-Type": "application/json" },
   });
 };
